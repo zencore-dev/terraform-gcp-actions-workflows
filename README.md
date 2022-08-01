@@ -19,3 +19,5 @@ jobs:
     with:
       working-directory: modules/my_module
 ```
+
+This action will run `fmt`, `validate`, and `plan` on PR's, and will `apply` on commits to main
