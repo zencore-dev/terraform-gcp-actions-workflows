@@ -3,7 +3,7 @@ name: "Terraform Workflow with GCP SA "
 on:
   workflow_call:
     inputs:
-      working_directory:
+      working-directory:
         required: true
         type: string
     secrets:
