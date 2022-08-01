@@ -2,6 +2,10 @@ name: "Terraform Workflow with GCP SA "
 
 on:
   workflow_call:
+    inputs:
+      working_directory:
+        required: true
+        type: string
     secrets:
       # provided as straight SA JSON
       GOOGLE_CREDENTIALS:
@@ -13,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: modules/organization
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
