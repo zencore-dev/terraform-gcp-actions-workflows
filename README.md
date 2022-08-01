@@ -14,6 +14,6 @@ on:
 
 jobs:
   terraform:
-    uses: zencore-dev/terraform-gcp-actions-workflows/.github/workflows/terraform.yaml@main
+    uses: zencore-dev/terraform-gcp-actions-workflows/.github/workflows/terraform.yml@main
     secrets: ${{secrets.GOOGLE_CREDENTIALS}}
 ```
