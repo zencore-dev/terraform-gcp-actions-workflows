@@ -47,6 +47,16 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
 
+      - name: Checkov
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          framework: terraform
+          skip_check: CKV_GCP_44 # skip a specific check_id. can be comma separated list
+          quiet: true # display only failed checks
+          soft_fail: false # do not return an error code if there are failed checks
+          output_format: github_failed_only
+
       - uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
         env:
@@ -66,6 +76,12 @@ jobs:
 
             </details>
 
+            #### Checkov 🧐 \`${{ steps.checkov.outcome }}\`
+            <details><summary>Show Checkov Security Scan results</summary>
+
+            ${{ steps.checkov.outputs.results }}
+
+            </details>
             *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -73,6 +89,7 @@ jobs:
               repo: context.repo.repo,
               body: output
             })
+
       - name: Terraform Plan Status
         if: steps.plan.outcome == 'failure'
         run: exit 1
