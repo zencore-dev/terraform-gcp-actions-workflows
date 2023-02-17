@@ -52,7 +52,7 @@ jobs:
         uses: bridgecrewio/checkov-action@master
         with:
           framework: terraform
-          skip_check: CKV_GCP_44, CKV_GCP_116 # skip a specific check_id. can be comma separated list
+          skip_check: CKV_GCP_44,CKV_GCP_116 # skip a specific check_id. can be comma separated list
           quiet: true # display only failed checks
           soft_fail: false # do not return an error code if there are failed checks
           output_format: github_failed_only
