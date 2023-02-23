@@ -6,6 +6,10 @@ on:
       working-directory:
         required: true
         type: string
+      skip-checkov:
+        required: false
+        type: bool
+        default: false
     secrets:
       # provided as straight SA JSON
       GOOGLE_CREDENTIALS:
@@ -48,6 +52,7 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
 
       - name: Checkov
+        if: ${{ inputs.skip-checkov == false }}
         id: checkov
         uses: bridgecrewio/checkov-action@master
         with:
