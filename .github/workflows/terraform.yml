@@ -10,6 +10,7 @@ on:
         required: false
         type: string
         default: ""
+        description: "A comma separated string of check ID's to ignore"
     secrets:
       # provided as straight SA JSON
       GOOGLE_CREDENTIALS:
