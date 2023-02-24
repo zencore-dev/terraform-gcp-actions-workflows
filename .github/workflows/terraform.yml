@@ -10,7 +10,12 @@ on:
         required: false
         type: string
         default: ""
-        description: "A comma separated string of check ID's to ignore"
+        description: "A comma separated string of user supplied check ID's to ignore"
+      checkov-default-ignore:
+        required: false
+        type: string
+        default: "CKV_GCP_44,CKV_GCP_116"
+        description: "A comma separated list of default check ID's to ignore"
     secrets:
       # provided as straight SA JSON
       GOOGLE_CREDENTIALS:
@@ -57,7 +62,7 @@ jobs:
         uses: bridgecrewio/checkov-action@master
         with:
           framework: terraform
-          skip_check: CKV_GCP_44,CKV_GCP_116,${{ inputs.checkov-ignore }} # skip a specific check_id. can be comma separated list
+          skip_check: ${{ inputs.checkov-default-ignore }},${{ inputs.checkov-ignore }} # skip a specific check_id. can be comma separated list
           quiet: true # display only failed checks
           soft_fail: false # do not return an error code if there are failed checks
           output_format: github_failed_only
