@@ -1,5 +1,5 @@
 # GitHub Actions Terraform Workflows
-Reusable Terraform workflow with support for Google Cloud Platform
+Reusable Terraform workflow with support for Google Cloud Platform (`terraform.yml`)
 
 ## Usage
 To call this workflow, create a `GOOGLE_CREDENTIALS` secret in your repo, containing the JSON string for a service account with the appropriate permissions, and place the following workflow in `.github/workflows`:
@@ -27,7 +27,7 @@ ___
 
 # GitHub Actions Terraform Workflows with Workload Identity Federation (WIF)
 
-Reusable Terraform workflow with support for Google Cloud Platform. Use cases:
+Reusable Terraform workflow with support for Google Cloud Platform (`terraform_wif.yml`). Use cases:
 
 - Use [Workload Identity Federation](https://cloud.google.com/blog/products/identity-security/enabling-keyless-authentication-from-github-actions) (Not `GOOGLE_CREDENTIALS` secret)
 - Manage large tfstate files. 
