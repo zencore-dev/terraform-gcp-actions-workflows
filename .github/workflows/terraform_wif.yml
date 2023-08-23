@@ -1,0 +1,136 @@
+name: "Terraform Workflow with Workload Identity Federation"
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+      workload-identity-provider:
+        required: true
+        type: string
+      service-account:
+        required: true
+        type: string
+      checkov-ignore:
+        required: false
+        type: string
+        default: ""
+        description: "A comma separated string of user supplied check ID's to ignore"
+      checkov-default-ignore:
+        required: false
+        type: string
+        default: "CKV_GCP_44,CKV_GCP_116,CKV_GCP_80,CKV_GCP_41,CKV_GCP_49,CKV2_GCP_5,CKV2_GCP_3,CKV2_GCP_18,CKV_GCP_76,CKV2_GCP_12"
+        description: "A comma separated list of default check ID's to ignore"
+
+jobs:
+  terraform:
+    name: "Terraform"
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v0.4.0'
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: ${{ inputs.workload-identity-provider }}
+          service_account: ${{ inputs.service-account }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Format
+        id: fmt
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+      
+      - name: Terraform Validate
+        id: validate
+        run: |
+          terraform validate
+          echo "::set-output name=stdout::$(terraform validate -no-color)"
+
+      - name: Terraform Plan
+        id: plan
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master' && ( github.event_name == 'push' || github.event_name == 'workflow_dispatch' )
+        run: |
+          terraform plan -out=tfplan.tmp 
+          terraform show -json tfplan.tmp | jq '.' > tfplan.json
+          terraform show -no-color tfplan.tmp >${GITHUB_WORKSPACE}/tfplan.out
+        continue-on-error: true
+
+      - name: Checkov With Custom Policy 
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: "${{ inputs.working-directory }}"
+          file: "${{ inputs.working-directory }}/tfplan.json"
+          skip_check: ${{ inputs.checkov-default-ignore }},${{ inputs.checkov-ignore }} # skip a specific check_id. can be comma separated list
+          quiet: true # display only failed checks
+          soft_fail: false # do not return an error code if there are failed checks
+          output_format: github_failed_only
+          framework: terraform_plan
+          external_checks_dirs: /github/workspace/.github/policies
+
+      - uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const run_url = process.env.GITHUB_SERVER_URL + '/' + process.env.GITHUB_REPOSITORY + '/actions/runs/' + process.env.GITHUB_RUN_ID
+            const run_link = '<a href="' + run_url + '">Actions</a>.'
+            const fs = require('fs')
+            const plan_file = fs.readFileSync('tfplan.out', 'utf8')
+            const plan = plan_file.length > 5000 ? plan_file.toString().substring(0, 5000) + " ..." : plan_file
+            const truncated_message = plan_file.length > 5000 ? "Output is too long and was truncated. You can read full Plan in " + run_link + "<br /><br />" : ""
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+            <details><summary>Show Plan</summary>
+
+            \`\`\`\n
+            ${plan}
+            \`\`\`
+
+            </details>
+
+            #### Checkov 🧐 \`${{ steps.checkov.outcome }}\`
+            <details><summary>Show Checkov Security Scan results</summary>
+
+            ${{ steps.checkov.outputs.results }}
+
+            </details>
+            ${truncated_message}
+            
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ github.workspace }}\`, Workflow: \`${{ github.workflow }}\`*`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/master' && ( github.event_name == 'push' || github.event_name == 'workflow_dispatch' )
+        run: terraform apply tfplan.tmp  
+        
