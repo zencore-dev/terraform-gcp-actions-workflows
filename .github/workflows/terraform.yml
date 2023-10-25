@@ -66,6 +66,7 @@ jobs:
           quiet: true # display only failed checks
           soft_fail: false # do not return an error code if there are failed checks
           output_format: github_failed_only
+          download_external_modules: true # download external terraform modules from public git repositories and terraform registry
 
       - uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
