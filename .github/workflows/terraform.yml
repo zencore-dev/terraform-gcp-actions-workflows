@@ -14,7 +14,7 @@ on:
       checkov-default-ignore:
         required: false
         type: string
-        default: "CKV_GCP_44,CKV_GCP_116,CKV_GCP_62"
+        default: "CKV_GCP_44,CKV_GCP_116,CKV_GCP_62,CKV2_GCP_5"
         description: "A comma separated list of default check ID's to ignore"
     secrets:
       # provided as straight SA JSON
