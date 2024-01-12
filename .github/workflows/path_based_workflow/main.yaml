@@ -1,0 +1,99 @@
+name: main workflow
+
+on:
+  push:
+    paths:
+      - 'environments/**'
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROD_SA: ${{ secrets.PROD_SA }}
+  NONPROD_SA: ${{ secrets.NONPROD_SA }}
+  SHARED_SA: ${{ secrets.SHARED_SA }}
+  BOOTSTRAP_SA: ${{ secrets.BOOTSTRAP_SA }}
+  WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+
+jobs:
+
+  # 1. Get a list of environments that have changes to build a deployment matrix.
+  #    Runs on every pull-request and push to main.
+  setup:
+    runs-on: self-hosted
+    outputs: 
+      folders: ${{ steps.updated_paths.outputs.array }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: get changed folders
+        id: get_changed_folders
+        uses: Stockopedia/action-get-changed-files@v2.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ignore: "**/+(.github)"
+          format: json # either json, csv or newline
+      - name: get updated paths
+        id: updated_paths
+        run: |
+          echo ${{ steps.get_changed_folders.outputs.changed }} > ./files.txt 
+          sed 's/\[\(.*\)\]/["\1"]/g' ./files.txt | sed 's/,/","/g' > ./temp_list.json
+          for f in $(jq '.[]' ./temp_list.json) ; do dirname $f | sed 's/"//g' ; done > ./temp_paths.txt
+          sort ./temp_paths.txt | uniq | grep -v '^\.' | sed '/modules/d'| sed '/.github/d' | sed '/old/d' | sed '/data/d'> ./clean_paths.txt
+          awk 'BEGIN { ORS=""; print "[" } { print (NR>1 ? "," : "") $0 } END { print "]" }' ./clean_paths.txt | sed 's/,/","/g' | sed 's/\[\(.*\)\]/["\1"]/g' | sed 's/,""//g' > ./clean_paths.json
+          arry=()
+          while IFS= read -r line; do
+            if [ "$line" != "environments" ]; then
+              arry+=("$line")
+            fi
+          done < <(jq -r '.[]' ./clean_paths.json)
+          arry=$(jq --compact-output --null-input '$ARGS.positional' --args -- "${arry[@]}")
+          echo "Updated folder list: $arry"
+          echo "array=$arry" >> $GITHUB_OUTPUT
+        shell: bash
+      - name: validate paths
+        id: validation
+        if: fromJson(steps.updated_paths.outputs.array)[0] == null
+        run: echo "No paths to process"
+
+  # 2. Run terrafom pre-deployment steps and Checkov policies on each environment.
+  #    If pass, then build a terraform plan for review.
+  #    Runs on every pull-request.
+  build:
+    needs: setup
+    if: fromJson(needs.setup.outputs.folders)[0] != null 
+    strategy:
+      fail-fast: false
+      matrix:
+        folder: ${{ fromJson(needs.setup.outputs.folders) }}
+    permissions:
+      contents: read
+      id-token: write 
+      pull-requests: write
+    uses: ./.github/workflows/terraform-ci.yaml
+    with:
+      working-directory: ${{ matrix.folder }}
+    secrets: inherit
+  
+  # 3. Apply the changes to each environment.
+  #    Runs on every push to main after the PR is merged.
+  deploy:
+    if: github.ref == 'refs/heads/main' && ( github.event_name == 'push' || github.event_name == 'workflow_dispatch' )
+    needs: [setup, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        folder: ${{ fromJson(needs.setup.outputs.folders) }}
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/terraform-cd.yaml
+    with:
+      working-directory: ${{ matrix.folder }}
+    secrets: inherit
+      
+        
