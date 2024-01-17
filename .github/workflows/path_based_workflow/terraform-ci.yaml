@@ -1,0 +1,150 @@
+name: "Terraform CI"
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+      checkov-ignore:
+        required: false
+        type: string
+        default: ""
+        description: "A comma separated string of user supplied check ID's to ignore"
+      checkov-default-ignore:
+        required: false
+        type: string
+        default: "CKV_GCP_44,CKV_GCP_116,CKV_GCP_62,CKV2_GCP_5,CKV_GCP_118,CKV_GCP_27,CKV_GCP_24,CKV_TF_1,CKV_GCP_69,CKV_GCP_68,CKV_GCP_22,CKV_GCP_72,CKV_GCP_42,CKV_GCP_41,CKV_GCP_49,CKV_GCP_109,CKV_GCP_110,CKV_GCP_60,CKV_GCP_111,CKV_GCP_108,CKV_GCP_14,CKV_GCP_54,CKV_GCP_52,CKV_GCP_53,CKV_GCP_51,CKV_GCP_79,CKV_GCP_97,CKV_GCP_95,CKV_GCP_12,CKV_GCP_29,CKV_GCP_114,CKV_GCP_78,CKV_GCP_83,CKV_GCP_28,CKV_GCP_21"
+        description: "A comma separated list of default check ID's to ignore"
+    secrets:
+      PROD_SA:
+        required: true
+      NONPROD_SA:
+        required: true
+      SHARED_SA:
+        required: true  
+      BOOTSTRAP_SA:
+        required: true    
+      WORKLOAD_IDENTITY_PROVIDER:
+        required: true
+
+jobs:
+  terraform:
+    name: "Terraform CI"
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Select service account
+        id: select_sa
+        run: |
+          if [[ "${{ inputs.working-directory }}" == "${{ vars.STAGING1_DIR }}" || "${{ inputs.working-directory }}" == "${{ vars.STAGING2_DIR }}" || "${{ inputs.working-directory }}" == "${{ vars.SANDBOX_DIR }}" ]]; then
+            SA=${{ secrets.NONPROD_SA }}
+            echo "service-account=$SA" >> $GITHUB_OUTPUT
+          elif [[ "${{ inputs.working-directory }}" == "${{ vars.PROD_DIR }}" ]]; then
+            SA=${{ secrets.PROD_SA }}
+            echo "service-account=$SA" >> $GITHUB_OUTPUT
+          elif [[ "${{ inputs.working-directory }}" == "${{ vars.SHARED_DIR }}" ]]; then
+            SA=${{ secrets.SHARED_SA }}
+            echo "service-account=$SA" >> $GITHUB_OUTPUT
+          elif [[ "${{ inputs.working-directory }}" == "${{ vars.ORG_DIR }}" || "${{ inputs.working-directory }}" == "${{ vars.SECURITY_DIR }}" ]]; then
+            SA=${{ secrets.BOOTSTRAP_SA }}
+            echo "service-account=$SA" >> $GITHUB_OUTPUT
+          else
+            echo "service-account=" >> $GITHUB_OUTPUT
+          fi
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ steps.select_sa.outputs.service-account }}
+          token_format: 'access_token'
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Format
+        id: fmt
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+      
+      - name: Terraform Validate
+        id: validate
+        run: |
+          terraform validate
+          echo "::set-output name=stdout::$(terraform validate -no-color)"
+
+      - name: Terraform Plan
+        id: plan
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' && ( github.event_name == 'push' || github.event_name == 'workflow_dispatch' ) 
+        run: terraform plan -no-color 
+        continue-on-error: true
+
+      - name: Checkov
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ${{ inputs.working-directory }}
+          framework: terraform
+          skip_check: ${{ inputs.checkov-default-ignore }},${{ inputs.checkov-ignore }} # skip a specific check_id. can be comma separated list
+          quiet: true # display only failed checks
+          soft_fail: false # do not return an error code if there are failed checks
+          output_format: github_failed_only
+          download_external_modules: true # download external terraform modules from public git repositories and terraform registry
+
+      - uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        env:
+          PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+            <details><summary>Show Plan</summary>
+
+            \`\`\`\n
+            ${process.env.PLAN}
+            \`\`\`
+
+            </details>
+
+            #### Checkov 🧐 \`${{ steps.checkov.outcome }}\`
+            <details><summary>Show Checkov Security Scan results</summary>
+
+            ${{ steps.checkov.outputs.results }}
+
+            </details>
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
