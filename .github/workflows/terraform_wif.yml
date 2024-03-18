@@ -28,7 +28,8 @@ on:
         description: "A comma separated list of default check ID's to ignore"
 
 env:
-  TF_VAR_main_org_credentials: ${{ inputs.main-org-credentials }}
+  #TF_VAR_main_org_credentials: ${{ inputs.main-org-credentials }}
+  TF_VAR_main_org_credentials: ${{ secrets.MAIN_ORG_CREDENTIALS }}
 
 jobs:
   terraform:
