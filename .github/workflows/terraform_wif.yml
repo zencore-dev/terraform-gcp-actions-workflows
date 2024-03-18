@@ -12,10 +12,6 @@ on:
       service-account:
         required: true
         type: string
-      main-org-credentials:
-        required: false
-        type: string
-        default: ""
       checkov-ignore:
         required: false
         type: string
@@ -28,8 +24,7 @@ on:
         description: "A comma separated list of default check ID's to ignore"
 
 env:
-  #TF_VAR_main_org_credentials: ${{ inputs.main-org-credentials }}
-  TF_VAR_main_org_credentials: ${{ secrets.MAIN_ORG_CREDENTIALS }}
+  TF_VAR_main_org_credentials: ${{ secrets.MAIN_ORG_CREDENTIALS }} #required by zencore-eng-org-tf repo to manage groups
 
 jobs:
   terraform:
