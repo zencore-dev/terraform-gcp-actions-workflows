@@ -23,9 +23,6 @@ on:
         default: "CKV_GCP_44,CKV_GCP_116,CKV_GCP_80,CKV_GCP_41,CKV_GCP_49,CKV2_GCP_5,CKV2_GCP_3,CKV2_GCP_18,CKV_GCP_76,CKV2_GCP_12"
         description: "A comma separated list of default check ID's to ignore"
 
-#env:
-#  TF_VAR_main_org_credentials: ${{ secrets.MAIN_ORG_CREDENTIALS }} #required by zencore-eng-org-tf repo to manage groups
-
 jobs:
   terraform:
     name: "Terraform"
