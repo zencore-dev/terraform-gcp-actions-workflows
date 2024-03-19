@@ -1,4 +1,5 @@
 # GitHub Actions Terraform Workflows
+**We should no longer be generating `GOOGLE_CREDENTIALS` for Service Accounts. Please use Workload Identity Federation (WIF) configuration below.**
 Reusable Terraform workflow with support for Google Cloud Platform (`terraform.yml`)
 
 ## Usage
