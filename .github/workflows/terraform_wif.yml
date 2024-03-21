@@ -87,6 +87,7 @@ jobs:
           framework: terraform_plan
           external_checks_dirs: /github/workspace/.github/policies
           repo_root_for_plan_enrichment: "${{ inputs.working-directory }}"
+          download_external_modules: true
 
       - uses: actions/github-script@v7
         if: github.event_name == 'pull_request'
